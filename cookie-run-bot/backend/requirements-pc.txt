@@ -1,0 +1,4 @@
+# Desktop (Windows/macOS/Linux). Termux uses scripts/requirements-termux.txt instead.
+-r requirements-core.txt
+mss>=9.0
+pydirectinput>=1.0.4; sys_platform == "win32"

@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "capture": {
+    "backend": "synthetic",
+    "region": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    },
+    "replay_path": "",
+    "replay_fps": 30.0,
+    "replay_loop": true,
+    "target_fps": 30.0
+  },
+  "adb": {
+    "executable": "adb",
+    "serial": "",
+    "command_timeout_s": 2.0,
+    "capture_timeout_s": 3.0
+  },
+  "viewport": {
+    "x": 0.0,
+    "y": 0.0,
+    "w": 1.0,
+    "h": 1.0
+  },
+  "rois": {
+    "jump_roi": {
+      "x": 0.3,
+      "y": 0.62,
+      "w": 0.12,
+      "h": 0.2
+    },
+    "slide_roi": {
+      "x": 0.3,
+      "y": 0.3,
+      "w": 0.12,
+      "h": 0.25
+    }
+  },
+  "vision": {
+    "jump": {
+      "processing": {
+        "method": "canny",
+        "blur_ksize": 5,
+        "canny_low": 60,
+        "canny_high": 160,
+        "adaptive_block": 21,
+        "adaptive_c": 7,
+        "morph": "dilate",
+        "morph_ksize": 3,
+        "morph_iterations": 1
+      },
+      "detection": {
+        "require": "both",
+        "min_density": 0.02,
+        "min_area_frac": 0.02,
+        "max_area_frac": 0.95,
+        "min_width_frac": 0.05,
+        "min_height_frac": 0.05,
+        "min_aspect": 0.05,
+        "max_aspect": 20.0,
+        "center_y_min": 0.0,
+        "center_y_max": 1.0,
+        "confirm_frames": 2,
+        "release_frames": 3
+      }
+    },
+    "slide": {
+      "processing": {
+        "method": "canny",
+        "blur_ksize": 5,
+        "canny_low": 60,
+        "canny_high": 160,
+        "adaptive_block": 21,
+        "adaptive_c": 7,
+        "morph": "dilate",
+        "morph_ksize": 3,
+        "morph_iterations": 1
+      },
+      "detection": {
+        "require": "both",
+        "min_density": 0.02,
+        "min_area_frac": 0.02,
+        "max_area_frac": 0.95,
+        "min_width_frac": 0.05,
+        "min_height_frac": 0.05,
+        "min_aspect": 0.05,
+        "max_aspect": 20.0,
+        "center_y_min": 0.0,
+        "center_y_max": 1.0,
+        "confirm_frames": 2,
+        "release_frames": 3
+      }
+    }
+  },
+  "decision": {
+    "jump_cooldown_ms": 350,
+    "slide_cooldown_ms": 350,
+    "detection_ttl_ms": 150,
+    "arbitration": "prefer_jump",
+    "max_frame_age_ms": 150,
+    "max_command_age_ms": 120,
+    "tap_ms": 40,
+    "double_jump": false,
+    "double_jump_delay_ms": 120,
+    "slide_hold": false,
+    "slide_hold_ms": 450
+  },
+  "input": {
+    "backend": "dryrun",
+    "jump_point": {
+      "x": 0.12,
+      "y": 0.85
+    },
+    "slide_point": {
+      "x": 0.88,
+      "y": 0.85
+    },
+    "jump_key": "space",
+    "slide_key": "down",
+    "queue_size": 4
+  },
+  "preview": {
+    "fps": 10.0,
+    "max_width": 640,
+    "jpeg_quality": 70
+  },
+  "safety": {
+    "dry_run": true,
+    "disconnect_policy": "pause",
+    "stale_capture_ms": 1000,
+    "calibration": null
+  }
+}

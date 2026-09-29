@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Local controller for the Cookie Run automation bot">
+  <title>Cookie Run Bot</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="offline-banner" class="banner banner-danger" hidden>
+    <strong>Backend unavailable.</strong> The dashboard cannot reach the local Python server. It will reconnect automatically but will never start the bot on its own.
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="/icons/icon-192.png" alt="" width="32" height="32">
+      <div>
+        <h1>Cookie Run Bot</h1>
+        <span class="muted small">Local controller · jump &amp; slide only</span>
+      </div>
+    </div>
+    <div class="pills">
+      <span id="conn-pill" class="pill pill-off" title="WebSocket connection">● Offline</span>
+      <span id="state-pill" class="pill pill-state" title="Bot state">STOPPED</span>
+    </div>
+    <label class="dryrun-toggle" title="Dry-run blocks all real input">
+      <input type="checkbox" id="dry-run" checked>
+      <span class="dryrun-track"><span class="dryrun-thumb"></span></span>
+      <span id="dry-run-label" class="dryrun-text">DRY-RUN ON</span>
+    </label>
+  </header>
+
+  <main class="layout">
+    <section class="col-main">
+      <div class="card preview-card">
+        <div class="card-head">
+          <div class="indicators">
+            <span id="ind-jump" class="indicator jump">JUMP</span>
+            <span id="ind-slide" class="indicator slide">SLIDE</span>
+          </div>
+          <div class="seg" id="view-seg" role="group" aria-label="Preview view">
+            <button data-view="annotated" class="active">Annotated</button>
+            <button data-view="raw">Raw</button>
+            <button data-view="mask">Edges/Mask</button>
+          </div>
+        </div>
+        <div id="canvas-wrap" class="canvas-wrap">
+          <canvas id="preview" aria-label="Live preview and ROI editor"></canvas>
+          <div id="preview-empty" class="preview-empty">Waiting for preview…</div>
+        </div>
+        <div class="edit-bar">
+          <span class="muted small">Edit:</span>
+          <div class="seg" id="edit-seg" role="group" aria-label="Edit target">
+            <button data-edit="none" class="active">Off</button>
+            <button data-edit="viewport">Viewport</button>
+            <button data-edit="jump_roi" class="t-jump">Jump ROI</button>
+            <button data-edit="slide_roi" class="t-slide">Slide ROI</button>
+            <button data-edit="jump_point" class="t-jump">Jump tap</button>
+            <button data-edit="slide_point" class="t-slide">Slide tap</button>
+          </div>
+          <span id="edit-hint" class="muted small"></span>
+        </div>
+        <div class="preview-meta small muted" id="preview-meta">—</div>
+      </div>
+
+      <div class="card controls-card">
+        <div class="controls">
+          <button id="btn-start" class="btn btn-start">▶ Start</button>
+          <button id="btn-pause" class="btn btn-pause">❚❚ Pause</button>
+          <button id="btn-stop" class="btn btn-stop">■ Stop</button>
+          <div class="state-reason"><span class="muted small">Reason:</span> <span id="state-reason">—</span></div>
+        </div>
+        <ul id="blockers" class="blockers"></ul>
+      </div>
+
+      <!-- MACRO RECORD & REPLAY CARD -->
+      <div class="card macro-card">
+        <div class="card-head">
+          <div class="row gap">
+            <h2>Macro: Record &amp; Replay Loop</h2>
+            <span id="macro-pill" class="pill pill-off">● IDLE</span>
+          </div>
+          <div class="row gap small muted">
+            <span class="hotkey-badge">F9: Record/Stop</span>
+            <span class="hotkey-badge">F10: Replay/Stop</span>
+            <span class="hotkey-badge">F12: E-Stop</span>
+          </div>
+        </div>
+
+        <p class="muted small" style="margin: 0 0 10px;">
+          เล่นรอบแรกตามปกติ บอทจะบันทึกจังหวะการกด Jump/Slide และการคลิกเริ่มใหม่ (Restart) ไว้เป็น <b>Loop 1</b> จากนั้นสามารถสั่ง Replay วนลูปกี่รอบก็ได้อัตโนมัติ
+        </p>
+
+        <div class="controls macro-controls">
+          <button id="btn-macro-record" class="btn btn-macro-rec">● Record (Round 1)</button>
+          <button id="btn-macro-stop-rec" class="btn btn-stop" disabled>■ Stop &amp; Save as Loop 1</button>
+          <button id="btn-macro-play" class="btn btn-macro-play">▶ Play Loops</button>
+          <button id="btn-macro-pause" class="btn btn-pause" disabled>❚❚ Pause</button>
+          <button id="btn-macro-stop-play" class="btn btn-stop" disabled>■ Stop Replay</button>
+        </div>
+
+        <!-- Macro Parameters -->
+        <div class="row gap mt macro-settings" style="align-items: flex-end;">
+          <label style="flex: 1; min-width: 120px;">Target Loops (0 = ∞)
+            <input type="number" id="macro-target-loops" min="0" max="999" value="5">
+          </label>
+          <label style="flex: 1; min-width: 100px;">Speed
+            <select id="macro-speed">
+              <option value="1.0" selected>1.0x (Normal)</option>
+              <option value="0.9">0.9x</option>
+              <option value="1.1">1.1x</option>
+              <option value="1.25">1.25x</option>
+            </select>
+          </label>
+          <label class="check" style="flex: 2; min-width: 220px; padding-bottom: 8px;">
+            <input type="checkbox" id="macro-auto-restart" checked>
+            <span>Auto-Restart (วนลูปด่านใหม่อัตโนมัติ)</span>
+          </label>
+        </div>
+
+        <!-- Progress and Timeline Info -->
+        <div class="macro-status-box mt">
+          <div class="row gap" style="justify-content: space-between; margin-bottom: 6px;">
+            <span id="macro-loop-info" class="small" style="font-weight: 700;">Loop: —</span>
+            <span id="macro-timer-info" class="small muted">00:00.0 / 00:00.0</span>
+          </div>
+          <div class="macro-progress-track">
+            <div id="macro-progress-bar" class="macro-progress-fill" style="width: 0%;"></div>
+          </div>
+          <div class="row gap mt small" style="justify-content: space-between;">
+            <span id="macro-event-count" class="muted">0 events recorded</span>
+            <span id="macro-last-action" class="muted">—</span>
+          </div>
+          <div id="macro-events-preview" class="macro-events-chips mt"></div>
+        </div>
+
+        <!-- Preset Load & Save -->
+        <div class="row gap mt" style="align-items: center; border-top: 1px solid var(--line); padding-top: 10px;">
+          <input type="text" id="macro-save-name" placeholder="Preset name (e.g. stage_1)" style="flex: 1; min-width: 140px;">
+          <button id="btn-macro-save" class="btn btn-sm btn-ghost">Save Preset</button>
+          <select id="macro-preset-select" style="flex: 1; min-width: 140px;">
+            <option value="">Load saved preset…</option>
+          </select>
+          <button id="btn-macro-load" class="btn btn-sm btn-ghost">Load</button>
+        </div>
+      </div>
+
+      <!-- AUTOPLAY CARD -->
+      <div class="card">
+        <div class="card-head"><h2>Autoplay</h2></div>
+        <p class="muted small" style="margin: 0 0 10px;">Teach every crystal/shop/purchase screen as <b>danger</b>. Teach revive 'No' as <b>tap</b>. Box/tap are frame pixels picked on the preview above (config is not changed).</p>
+        <div class="grid2">
+          <label>Name<input id="ap-name" maxlength="40" placeholder="e.g. lobby_play"></label>
+          <label>Role
+            <select id="ap-role">
+              <option>danger</option><option>no_hearts</option><option selected>tap</option><option>result</option><option>item_screen</option>
+              <option>map_select</option><option>running</option><option>map</option><option>roll</option><option>item</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid4 mt">
+          <label>Box x<input type="number" id="ap-bx" min="0" step="1"></label>
+          <label>Box y<input type="number" id="ap-by" min="0" step="1"></label>
+          <label>Box w<input type="number" id="ap-bw" min="8" step="1"></label>
+          <label>Box h<input type="number" id="ap-bh" min="8" step="1"></label>
+          <label>Tap x<input type="number" id="ap-tx" min="0" step="1"></label>
+          <label>Tap y<input type="number" id="ap-ty" min="0" step="1"></label>
+          <label>Threshold<input type="number" id="ap-thr" min="0.5" max="0.99" step="0.01" value="0.8"></label>
+          <label id="ap-profile-wrap" hidden>Vision profile<select id="ap-profile"></select></label>
+        </div>
+        <div class="row gap mt">
+          <button id="btn-ap-pickbox" class="btn btn-sm btn-ghost">Pick box on preview</button>
+          <button id="btn-ap-picktap" class="btn btn-sm btn-ghost">Pick tap on preview</button>
+          <button id="btn-ap-save" class="btn btn-sm btn-primary">Save screen</button>
+          <span id="ap-teach-result" class="small muted"></span>
+        </div>
+
+        <div class="row gap mt" style="justify-content: space-between; border-top: 1px solid var(--line); padding-top: 10px;">
+          <span class="small muted">Taught screens</span>
+          <button id="btn-ap-check" class="btn btn-sm btn-ghost">Check match</button>
+        </div>
+        <div id="ap-screens" class="small mt"></div>
+
+        <div class="grid4 mt" style="border-top: 1px solid var(--line); padding-top: 10px;">
+          <label>Map<select id="ap-map"></select></label>
+          <label>Loops
+            <select id="ap-loops"><option value="10" selected>10</option><option value="100">100</option><option value="custom">Custom</option></select>
+          </label>
+          <label id="ap-loops-wrap" hidden>Custom loops<input type="number" id="ap-loops-custom" min="1" max="9999" step="1" value="10"></label>
+          <label>Roll cap<input type="number" id="ap-roll-cap" min="0" max="100" step="1" value="10"></label>
+          <label>Heart wait (min)<input type="number" id="ap-heart" min="1" max="120" step="1" value="12"></label>
+          <label>Unknown BACK after (s)<input type="number" id="ap-back" min="1" max="60" step="1" value="5"></label>
+        </div>
+        <div class="small muted mt">Wanted items (rolls until one shows, up to roll cap)</div>
+        <div id="ap-items" class="row gap small"></div>
+        <div class="row gap mt">
+          <button id="btn-ap-start" class="btn btn-start">▶ Start Autoplay</button>
+          <button id="btn-ap-stop" class="btn btn-stop" disabled>■ Stop Autoplay</button>
+        </div>
+        <p id="ap-status" class="small muted">Autoplay idle.</p>
+      </div>
+
+      <div class="card">
+        <h2>Telemetry</h2>
+        <div id="telemetry" class="tele-grid"></div>
+        <p class="muted small">Input dispatch is local command completion (e.g. ADB process exit), not confirmed game response time.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Logs</h2><button id="btn-clear-logs" class="btn btn-ghost btn-sm">Clear view</button></div>
+        <div id="logs" class="logs" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <aside class="col-side">
+      <div class="card">
+        <h2>Calibration</h2>
+        <p id="cal-status" class="small"></p>
+        <ol class="small muted steps">
+          <li>Set the <b>Viewport</b> to the game area (for desktop capture + ADB input it must cover exactly the Android screen).</li>
+          <li>Place <b>Jump/Slide ROIs</b> just ahead of the cookie and set the tap points.</li>
+          <li>Use test buttons (dry-run logs only; real input only after dry-run is off).</li>
+          <li>Confirm calibration. Changing size, orientation, viewport or tap points requires recalibration.</li>
+        </ol>
+        <div class="row gap">
+          <button id="btn-calibrate" class="btn btn-primary">Confirm calibration</button>
+          <button id="btn-clear-cal" class="btn btn-ghost">Clear</button>
+        </div>
+        <div class="row gap mt">
+          <button id="btn-test-jump" class="btn btn-jump">Test jump</button>
+          <button id="btn-test-slide" class="btn btn-slide">Test slide</button>
+        </div>
+        <p id="test-reason" class="small muted"></p>
+      </div>
+
+      <div class="card">
+        <h2>Backends &amp; device</h2>
+        <form id="backend-form" class="form" autocomplete="off">
+          <label>Capture backend
+            <select name="capture.backend">
+              <option value="synthetic">Synthetic demo scene</option>
+              <option value="replay">Replay video/image</option>
+              <option value="mss">Desktop region (MSS)</option>
+              <option value="adb">ADB screencap</option>
+            </select>
+          </label>
+          <fieldset data-show="mss">
+            <legend>Desktop capture rectangle (px)</legend>
+            <div class="grid4">
+              <label>Left<input type="number" name="capture.region.left" step="1"></label>
+              <label>Top<input type="number" name="capture.region.top" step="1"></label>
+              <label>Width<input type="number" name="capture.region.width" min="16" step="1"></label>
+              <label>Height<input type="number" name="capture.region.height" min="16" step="1"></label>
+            </div>
+            <p class="small muted">Captures what is visible on screen; obscured or minimized windows are not captured.</p>
+          </fieldset>
+          <fieldset data-show="replay">
+            <legend>Replay</legend>
+            <label>File path<input name="capture.replay_path" list="replay-list" placeholder="replays/run.mp4"></label>
+            <datalist id="replay-list"></datalist>
+            <div class="grid2">
+              <label>Replay FPS<input type="number" name="capture.replay_fps" min="1" max="240" step="1"></label>
+              <label class="check"><input type="checkbox" name="capture.replay_loop"> Loop</label>
+            </div>
+          </fieldset>
+          <label>Capture rate limit (fps)<input type="number" name="capture.target_fps" min="1" max="120" step="1"></label>
+          <fieldset>
+            <legend>ADB</legend>
+            <label>Executable<input name="adb.executable" placeholder="adb"></label>
+            <label>Device serial
+              <div class="row gap">
+                <input name="adb.serial" list="serial-list" placeholder="emulator-5554 or 192.168.1.20:40123">
+                <button type="button" id="btn-refresh-dev" class="btn btn-ghost btn-sm">Refresh</button>
+              </div>
+            </label>
+            <datalist id="serial-list"></datalist>
+            <div class="grid2">
+              <label>Command timeout (s)<input type="number" name="adb.command_timeout_s" min="0.2" max="10" step="0.1"></label>
+              <label>Capture timeout (s)<input type="number" name="adb.capture_timeout_s" min="0.5" max="15" step="0.1"></label>
+            </div>
+            <div id="adb-devices" class="small muted"></div>
+            <details class="mt">
+              <summary class="small">Wireless ADB connect / pair</summary>
+              <div class="grid2 mt">
+                <label>host:port<input id="adb-endpoint" placeholder="192.168.1.20:37099"></label>
+                <label>Pairing code<input id="adb-code" inputmode="numeric" maxlength="6" placeholder="6 digits"></label>
+              </div>
+              <div class="row gap"><button type="button" id="btn-adb-pair" class="btn btn-ghost btn-sm">Pair</button>
+                <button type="button" id="btn-adb-connect" class="btn btn-ghost btn-sm">Connect</button></div>
+              <p id="adb-result" class="small muted"></p>
+            </details>
+          </fieldset>
+          <label>Input backend
+            <select name="input.backend">
+              <option value="dryrun">Dry-run only</option>
+              <option value="adb">ADB touch (tap / timed swipe)</option>
+              <option value="keyboard">Windows keyboard (PyDirectInput)</option>
+            </select>
+          </label>
+          <div class="grid2" data-show-input="keyboard">
+            <label>Jump key<input name="input.jump_key"></label>
+            <label>Slide key<input name="input.slide_key"></label>
+          </div>
+          <div id="caps" class="caps small"></div>
+          <div class="grid2">
+            <label>On dashboard disconnect
+              <select name="safety.disconnect_policy">
+                <option value="pause">Pause input</option>
+                <option value="continue_background">Keep running (background mode)</option>
+              </select>
+            </label>
+            <label>Stale capture limit (ms)<input type="number" name="safety.stale_capture_ms" min="100" max="30000" step="50"></label>
+          </div>
+          <p class="small muted">Background mode lets you switch to the game on the same Android device; use it deliberately.</p>
+          <button type="submit" class="btn btn-primary">Apply backend settings</button>
+          <p id="backend-result" class="small"></p>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Detection</h2>
+          <div class="seg" id="roi-seg"><button data-roi="jump" class="active t-jump">Jump</button><button data-roi="slide" class="t-slide">Slide</button></div>
+        </div>
+        <p class="small muted">Image processing builds the mask; detection thresholds judge it. Scores are heuristic, not probabilities.</p>
+        <div id="detect-fields" class="sliders"></div>
+      </div>
+
+      <div class="card">
+        <h2>Action timing</h2>
+        <div id="timing-fields" class="sliders"></div>
+        <p id="feature-support" class="small muted"></p>
+      </div>
+
+      <div class="card">
+        <h2>Preview</h2>
+        <div id="preview-fields" class="sliders"></div>
+      </div>
+
+      <div class="card">
+        <h2>Profiles</h2>
+        <div class="row gap">
+          <select id="profile-select" aria-label="Profiles"></select>
+          <button id="btn-load-profile" class="btn btn-ghost btn-sm">Load</button>
+        </div>
+        <div class="row gap mt">
+          <input id="profile-name" placeholder="profile name" maxlength="40" pattern="[A-Za-z0-9_-]+">
+          <button id="btn-save-profile" class="btn btn-ghost btn-sm">Save current</button>
+        </div>
+        <p id="profile-result" class="small muted"></p>
+      </div>
+
+      <div class="card">
+        <h2>Emergency stop</h2>
+        <p class="small muted">Outside this dashboard: press <b>F12</b> (Windows server hotkey), create the file <code id="estop-path">EMERGENCY_STOP</code> (e.g. <code>python -m backend.estop</code>), or press Ctrl+C in the server terminal.</p>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="auth-dialog">
+    <form method="dialog" id="auth-form">
+      <h2>Authentication required</h2>
+      <p class="small muted">LAN mode is enabled. Enter the server token (kept in this tab's session storage only).</p>
+      <input type="password" id="auth-token" autocomplete="off" required minlength="24">
+      <div class="row gap mt"><button class="btn btn-primary" value="ok">Connect</button></div>
+    </form>
+  </dialog>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
