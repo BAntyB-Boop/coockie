@@ -20,6 +20,7 @@ from .capture import CaptureBackend, CaptureWorker, LatestFrame, build_capture
 from .config import (ESTOP_FILE, AppConfig, CalibrationSignature, ConfigStore, merge_client_config)
 from .decision_engine import Command, DecisionEngine, new_command
 from .geometry import roi_pixel_problems
+from .game_state import GameStateDetector
 from .input_handler import (DryRunInput, InputBackend, InputContext, InputWorker, build_input)
 from .macro import MacroEvent, MacroManager
 from .telemetry import Clock, DurationStats, LogBuffer, RateMeter
@@ -93,6 +94,7 @@ class BotController:
         self.input = self._make_input_worker()
         self.macro = MacroManager(input_dispatch=self._macro_dispatch)
         self.autoplay = Autoplay(self)
+        self.game_state = GameStateDetector(self.autoplay.screens, self._on_game_state_transition)
         _init_cfg = store.get()
         self.macro.recorder.configure_keys(_init_cfg.input.jump_key, _init_cfg.input.slide_key)
 
@@ -156,6 +158,11 @@ class BotController:
         self.state = st
         self.state_reason = reason
 
+    def _on_game_state_transition(self, old: str, new: str, screen: Optional[str]) -> None:
+        suffix = f" ({screen})" if screen else ""
+        self.logs.add("warning" if new == "DANGER" else "info",
+                      f"game state {old} -> {new}{suffix}")
+
     def _macro_dispatch(self, evt: MacroEvent) -> None:
         cfg = self.store.get()
         if cfg.safety.dry_run or cfg.input.backend == "dryrun":
@@ -204,6 +211,7 @@ class BotController:
                 return False, reasons
             self.decision.reset()
             self.vision.reset()
+            self.game_state.reset()
             self.last_error = None
             self._set_state(State.READY, "waiting for a fresh frame")
             return True, []
@@ -223,6 +231,7 @@ class BotController:
             self._halt_input()
             self.decision.reset()
             self.vision.reset()
+            self.game_state.reset()
             self._set_state(State.STOPPED, reason)
         if not reason.startswith("autoplay"):
             self.autoplay.stop(reason)
@@ -313,6 +322,8 @@ class BotController:
             elif full:
                 reasons += self.real.check_ready(self.input_context())
             reasons += self.calibration_problems(query=full)
+        if cfg.game_state.enabled and cfg.game_state.guard_actions and not self.game_state.configured():
+            reasons.append("game-state guard needs a taught 'running' screen")
         return reasons
 
     # ----------------------------------------------------------- settings
@@ -329,6 +340,8 @@ class BotController:
             if cur.safety.calibration and merged.safety.calibration is None:
                 self.logs.add("warning", "calibration cleared: coordinate-affecting settings changed")
             saved = self.store.set(merged)
+            if merged.game_state != cur.game_state:
+                self.game_state.reset()
             if input_changed:
                 try:
                     self.real.close()
@@ -490,10 +503,18 @@ class BotController:
         result = self.vision.process(frame.id, frame.ts, frame.image, cfg)
         self.vision_ms.add(result.duration_ms)
         self._pair = (frame, result)
+        game = self.game_state.observe(frame.image, self.clock.now(), cfg.game_state, frame.id) \
+            if cfg.game_state.enabled else self.game_state.snapshot()
+        guarded = cfg.game_state.enabled and cfg.game_state.guard_actions
+        if guarded and game.changed and game.state != "RUNNING":
+            self._halt_input()
         with self._lock:
             if self.state == State.READY and (self.clock.now() - frame.ts) * 1000 <= cfg.decision.max_frame_age_ms:
-                self._set_state(State.RUNNING, "running" + (" (dry-run)" if cfg.safety.dry_run else " (REAL INPUT)"))
-            running = self.state == State.RUNNING
+                if not guarded or game.state == "RUNNING":
+                    self._set_state(State.RUNNING, "running" + (" (dry-run)" if cfg.safety.dry_run else " (REAL INPUT)"))
+                else:
+                    self._set_state(State.READY, f"waiting for game RUNNING state (now {game.state})")
+            running = self.state == State.RUNNING and (not guarded or game.state == "RUNNING")
         caps = (self.dry if cfg.safety.dry_run else self.real).capabilities()
         out = self.decision.evaluate(result, self.clock.now(), running, cfg, caps)
         self.frame_age_ms.add(out.frame_age_ms)
@@ -553,7 +574,8 @@ class BotController:
                         meta = {"v": PROTOCOL_VERSION, "type": "preview_meta", "frame_id": frame.id, "view": v,
                                 "width": img.shape[1], "height": img.shape[0], "src_width": frame.width,
                                 "src_height": frame.height, "bytes": len(jpeg),
-                                "jump": result.jump.to_dict(), "slide": result.slide.to_dict()}
+                                "jump": result.jump.to_dict(), "slide": result.slide.to_dict(),
+                                "game_state": self.game_state.status(self.clock.now(), cfg.game_state)}
                         self._previews[v] = (frame.id, meta, jpeg)
                     self.preview_rate.tick()
                 except Exception as exc:
@@ -596,6 +618,7 @@ class BotController:
             "estop": self._estop_active(), "estop_file": str(self.estop_file) if self.estop_file else None,
             "clients": self.event_clients, "last_error": self.last_error,
             "macro": self.macro.status(), "autoplay": self.autoplay.status(),
+            "game_state": self.game_state.status(self.clock.now(), cfg.game_state),
         }
 
     def telemetry(self) -> dict:
@@ -616,4 +639,5 @@ class BotController:
             "last_detected": self.last_detected, "last_executed": self.last_executed,
             "last_suppressed": self.last_suppressed, "notes": self.decision_notes,
             "last_error": self.last_error,
+            "game_state": self.game_state.status(self.clock.now(), self.store.get().game_state),
         }

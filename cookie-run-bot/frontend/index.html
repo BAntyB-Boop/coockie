@@ -153,12 +153,19 @@
       <!-- AUTOPLAY CARD -->
       <div class="card">
         <div class="card-head"><h2>Autoplay</h2></div>
+        <div class="row gap" style="justify-content: space-between; margin-bottom: 10px;">
+          <div>
+            <b>Game State Detector</b>
+            <div id="game-state-detail" class="small muted">Waiting for a frame…</div>
+          </div>
+          <span id="game-state-pill" class="pill pill-off">UNKNOWN</span>
+        </div>
         <p class="muted small" style="margin: 0 0 10px;">Teach every crystal/shop/purchase screen as <b>danger</b>. Teach revive 'No' as <b>tap</b>. Box/tap are frame pixels picked on the preview above (config is not changed).</p>
         <div class="grid2">
           <label>Name<input id="ap-name" maxlength="40" placeholder="e.g. lobby_play"></label>
           <label>Role
             <select id="ap-role">
-              <option>danger</option><option>no_hearts</option><option selected>tap</option><option>result</option><option>item_screen</option>
+              <option>shop</option><option>danger</option><option>no_hearts</option><option>revive</option><option>ready</option><option selected>tap</option><option>result</option><option>item_screen</option>
               <option>map_select</option><option>running</option><option>map</option><option>roll</option><option>item</option>
             </select>
           </label>
@@ -316,6 +323,17 @@
             </label>
             <label>Stale capture limit (ms)<input type="number" name="safety.stale_capture_ms" min="100" max="30000" step="50"></label>
           </div>
+          <fieldset>
+            <legend>Game State Detector</legend>
+            <div class="grid2">
+              <label class="check"><input type="checkbox" name="game_state.enabled"> Detect taught screens</label>
+              <label class="check"><input type="checkbox" name="game_state.guard_actions"> Guard Jump / Slide</label>
+              <label>Check every (ms)<input type="number" name="game_state.sample_interval_ms" min="50" max="2000" step="50"></label>
+              <label>Confirm frames<input type="number" name="game_state.confirm_frames" min="1" max="10" step="1"></label>
+              <label>Unknown grace (ms)<input type="number" name="game_state.unknown_grace_ms" min="0" max="10000" step="100"></label>
+            </div>
+            <p class="small muted">Guard mode sends automatic input only while a taught <b>running</b> marker is confirmed. Teach the marker before enabling it.</p>
+          </fieldset>
           <p class="small muted">Background mode lets you switch to the game on the same Android device; use it deliberately.</p>
           <button type="submit" class="btn btn-primary">Apply backend settings</button>
           <p id="backend-result" class="small"></p>

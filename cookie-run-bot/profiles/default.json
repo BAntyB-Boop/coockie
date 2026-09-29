@@ -132,5 +132,12 @@
     "disconnect_policy": "pause",
     "stale_capture_ms": 1000,
     "calibration": null
+  },
+  "game_state": {
+    "enabled": true,
+    "guard_actions": false,
+    "sample_interval_ms": 200,
+    "confirm_frames": 2,
+    "unknown_grace_ms": 1000
   }
 }

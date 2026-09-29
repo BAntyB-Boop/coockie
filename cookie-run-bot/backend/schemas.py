@@ -71,7 +71,8 @@ class ControlResponse(BaseModel):
     reasons: list[str] = []
 
 
-ROLES = ("danger", "no_hearts", "tap", "result", "item_screen", "map_select", "running", "map", "roll", "item")
+ROLES = ("shop", "danger", "no_hearts", "revive", "ready", "tap", "result", "item_screen",
+         "map_select", "running", "map", "roll", "item")
 
 
 class ScreenEntry(BaseModel):
@@ -94,7 +95,7 @@ class ScreenEntry(BaseModel):
             raise ValueError("name must match [A-Za-z0-9_-]{1,40}")
         if self.box[0] < 0 or self.box[1] < 0 or self.box[2] < 8 or self.box[3] < 8:
             raise ValueError("box must be x,y >= 0 and w,h >= 8")
-        if self.role in ("tap", "result", "no_hearts", "item_screen", "roll") and self.tap is None:
+        if self.role in ("tap", "ready", "revive", "result", "no_hearts", "item_screen", "roll") and self.tap is None:
             raise ValueError(f"role {self.role} needs a tap point")
         if self.profile and (self.role != "map" or not PROFILE_NAME_RE.match(self.profile)):
             raise ValueError("profile only for role map and must match [A-Za-z0-9_-]{1,40}")

@@ -513,7 +513,20 @@
       (caps.notes || []).map((n) => `<span class="muted">· ${esc(n)}</span>`).join(" ");
     if (st.macro) renderMacro(st.macro);
     if (st.autoplay) renderAutoplay(st.autoplay);
+    if (st.game_state) renderGameState(st.game_state);
     updateButtons();
+  }
+
+  function renderGameState(g) {
+    const pill = $("game-state-pill"), detail = $("game-state-detail");
+    if (!pill || !detail) return;
+    pill.textContent = g.enabled ? g.state : "OFF";
+    pill.dataset.state = g.state === "RUNNING" ? "RUNNING" : (g.state === "DANGER" ? "ERROR" : "PAUSED");
+    const match = g.screen ? `${g.screen} (${Number(g.score || 0).toFixed(2)})` : "no template match";
+    const mode = g.guard_actions ? (g.actions_allowed ? "guard allowing actions" : "guard blocking actions") : "observe only";
+    detail.textContent = !g.enabled ? "Disabled in backend settings." :
+      `${match} · ${mode}` + (g.configured ? "" : " · teach a running screen to enable Guard");
+    detail.className = "small " + (g.state === "DANGER" || (g.guard_actions && !g.actions_allowed) ? "bad" : "muted");
   }
 
   function updateButtons() {
@@ -558,6 +571,7 @@
       ["Commands", `${t.executed_commands} ok`, `${t.expired_commands} expired · ${t.dropped_commands} dropped · ${t.rejected_commands} rejected`],
       ["Detected", det, sup ? "suppressed " + sup : ""], ["Executed", last, t.last_executed && t.last_executed.dispatch_ms != null ? `${t.last_executed.dispatch_ms} ms dispatch` : ""],
       ["Capture errors", t.capture_errors, ""], ["Latest error", t.last_error || "none", (t.notes || []).join("; ")],
+      ["Game state", t.game_state ? t.game_state.state : "—", t.game_state && t.game_state.screen ? `${t.game_state.screen} · score ${Number(t.game_state.score || 0).toFixed(2)}` : ""],
     ];
     $("telemetry").innerHTML = cells.map(([k, v, s]) => `<div class="tele"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
   }

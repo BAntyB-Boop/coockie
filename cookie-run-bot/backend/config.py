@@ -214,6 +214,14 @@ class SafetyConfig(StrictModel):
     calibration: Optional[CalibrationSignature] = None
 
 
+class GameStateConfig(StrictModel):
+    enabled: bool = True
+    guard_actions: bool = False
+    sample_interval_ms: int = Field(default=200, ge=50, le=2000)
+    confirm_frames: int = Field(default=2, ge=1, le=10)
+    unknown_grace_ms: int = Field(default=1000, ge=0, le=10000)
+
+
 class AppConfig(StrictModel):
     version: int = 1
     capture: CaptureConfig = CaptureConfig()
@@ -225,6 +233,7 @@ class AppConfig(StrictModel):
     input: InputConfig = InputConfig()
     preview: PreviewConfig = PreviewConfig()
     safety: SafetyConfig = SafetyConfig()
+    game_state: GameStateConfig = GameStateConfig()
 
 
 def calibration_key(cfg: AppConfig) -> tuple:

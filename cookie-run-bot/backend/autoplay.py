@@ -20,7 +20,7 @@ from .config import DATA_DIR, NormPoint, atomic_write_json
 from .geometry import frame_to_viewport_norm, to_android_display
 from .schemas import ROLES, AutoplayStart
 
-PRIORITY = ROLES[:7]  # map/roll/item are sub-elements, never classified
+PRIORITY = ROLES[:10]  # map/roll/item are sub-elements, never classified
 ACTION_COOLDOWN_S, ROLL_WAIT_S, STUCK_S, MAX_SWIPES, RUN_GRACE_S, MARGIN = 1.0, 2.0, 60.0, 10, 1.0, 24
 
 
@@ -308,15 +308,17 @@ class Autoplay:
         self.unknown_since, self.backed, self.screen = None, False, e["name"]
         if role != "running":
             self._vision(False, img)
-        if role == "danger":
-            self._halt(f"danger screen {e['name']}", img)
+        if role in ("danger", "shop"):
+            self._halt(f"{role} screen {e['name']}", img)
         elif role == "no_hearts":
             io.tap(*tap)
             self.wait_until = now + self.heart_wait_min * 60
             self.message = f"out of hearts, waiting {self.heart_wait_min:g} min"
-        elif role == "tap":
+        elif role in ("tap", "ready", "revive"):
             io.tap(*tap)
             self.wait_until = now + ACTION_COOLDOWN_S
+            if role == "revive":
+                self.message = f"revive choice {e['name']} tapped"
         elif role == "result":
             if not self.counted:
                 self.loops_done, self.counted = self.loops_done + 1, True

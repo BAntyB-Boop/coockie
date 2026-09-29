@@ -93,8 +93,11 @@ Matching is grayscale template matching (box +/- 24 px; `map` searches the whole
 
 | Role | Behaviour |
 |---|---|
+| `shop` | shop/purchase screen. Seen -> session **stops + alert**. Never tapped. |
 | `danger` | shop / crystal / purchase / revive-with-crystals. Seen -> session **stops + alert**. Never tapped. |
 | `no_hearts` | out-of-hearts popup: tap (close, never buy), then wait `heart_wait_min`. |
+| `revive` | reports `REVIVE` and taps the taught safe choice (teach only the "No" button). |
+| `ready` | reports `READY` and taps the taught Start/Play point. |
 | `tap` | tap whenever seen (Play, popups, revive "No", exit-dialog "No"). |
 | `result` | counts one loop per run; at N loops stops without tapping, else taps Retry. |
 | `item_screen` | tap point = START. Rolls (`roll` entry) until a wanted `item` shows or `roll_cap` is hit. |
@@ -109,6 +112,17 @@ API: `POST /api/autoplay/start|stop`, `GET /api/autoplay/screens|match`, `status
 Safety: teach **every** crystal/shop/purchase screen as `danger` and revive "No" as `tap`. Real taps need the ADB
 input backend, honour dry-run and the emergency-stop file; user Stop/Pause, F12, errors and dashboard disconnect
 (policy pause) all end the session. Requires a taught `running` and `result` screen before start.
+
+### Game State Detector
+
+The same taught screens feed a debounced detector shared by the main bot. It reports `UNKNOWN`, `MENU`, `READY`,
+`RUNNING`, `RESULT`, `REVIVE`, `SHOP`, `NO_HEARTS`, or `DANGER` in the dashboard and telemetry. Matching runs at a bounded rate,
+requires consecutive confirmations, and keeps the last state briefly when a marker flickers.
+
+Enable **Guard Jump / Slide** under *Backends & device* after teaching a `running` marker. In guard mode, Start
+waits for a confirmed `RUNNING` state and queued or held automatic input is cleared as soon as a confirmed menu,
+result, danger, or prolonged unknown screen appears. Detection defaults to observe-only so existing profiles
+continue to work until the guard is deliberately enabled.
 
 ## LAN access (optional)
 

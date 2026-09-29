@@ -1,6 +1,6 @@
 /* Service Worker: caches versioned static assets only.
    Control APIs, live state, WebSockets and auth data are never cached. */
-const VERSION = "crb-static-v1.0.1";
+const VERSION = "crb-static-v1.1.0";
 const ASSETS = [
   "/", "/index.html", "/app.js", "/styles.css", "/manifest.json",
   "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png",
