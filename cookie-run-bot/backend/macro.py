@@ -60,9 +60,59 @@ def vk_to_key(vk: int) -> str:
 # ---------------------------------------------------------------------------
 # Native Windows Input Helpers (ctypes fallback if pydirectinput not present)
 # ---------------------------------------------------------------------------
+def _attach_desktop_win32() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        hwinsta = u.OpenWindowStationW("WinSta0", False, 0x37F)
+        if hwinsta:
+            u.SetProcessWindowStation(hwinsta)
+            hdesk = u.OpenDesktopW("Default", 0, False, 0x1FF)
+            if hdesk:
+                u.SetThreadDesktop(hdesk)
+    except Exception:
+        pass
+
+
+def _post_vk_to_emulator(vk: int, is_down: bool) -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        hwnd = u.FindWindowW(None, "LDPlayer")
+        if not hwnd:
+            return
+        render_hwnd = None
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+
+        def enum_child_cb(h, lparam):
+            nonlocal render_hwnd
+            sb = ctypes.create_unicode_buffer(256)
+            u.GetClassNameW(h, sb, 256)
+            if sb.value == "RenderWindow":
+                render_hwnd = h
+                return False
+            return True
+
+        u.EnumChildWindows(hwnd, WNDENUMPROC(enum_child_cb), 0)
+        target = render_hwnd or hwnd
+        scan = u.MapVirtualKeyW(vk, 0)
+        msg = 0x0100 if is_down else 0x0101
+        lparam = (1 | (scan << 16)) if is_down else (1 | (scan << 16) | (1 << 30) | (1 << 31))
+        u.PostMessageW(target, msg, vk, lparam)
+    except Exception:
+        pass
+
+
 def _native_key_down(vk: int) -> None:
     if sys.platform != "win32":
         return
+    _attach_desktop_win32()
+    _post_vk_to_emulator(vk, True)
     import ctypes
     u = ctypes.windll.user32
     scan = u.MapVirtualKeyW(vk, 0)
@@ -72,6 +122,8 @@ def _native_key_down(vk: int) -> None:
 def _native_key_up(vk: int) -> None:
     if sys.platform != "win32":
         return
+    _attach_desktop_win32()
+    _post_vk_to_emulator(vk, False)
     import ctypes
     u = ctypes.windll.user32
     scan = u.MapVirtualKeyW(vk, 0)
@@ -81,6 +133,7 @@ def _native_key_up(vk: int) -> None:
 def _native_mouse_click(x: int, y: int) -> None:
     if sys.platform != "win32":
         return
+    _attach_desktop_win32()
     import ctypes
     u = ctypes.windll.user32
     u.SetCursorPos(x, y)
@@ -92,6 +145,7 @@ def _native_mouse_click(x: int, y: int) -> None:
 def _get_cursor_pos() -> tuple[int, int]:
     if sys.platform != "win32":
         return (0, 0)
+    _attach_desktop_win32()
     import ctypes
     import ctypes.wintypes
     u = ctypes.windll.user32
@@ -249,6 +303,7 @@ class MacroRecorder:
                 pass
             return
 
+        _attach_desktop_win32()
         import ctypes
         user32 = ctypes.windll.user32
 
@@ -259,7 +314,7 @@ class MacroRecorder:
             self.restart_key: "restart",
         }
         # Also include common keys if not already mapped
-        for k in ("space", "down", "d", "f", "enter", "r"):
+        for k in ("space", "down", "w", "s", "d", "f", "enter", "r"):
             if k not in key_actions:
                 key_actions[k] = k
 
@@ -269,9 +324,9 @@ class MacroRecorder:
             if vk is not None:
                 monitored_vks[vk] = (act, k)
 
-        key_states: dict[int, bool] = {vk: False for vk in monitored_vks}
-        mouse_down = False
+        key_states: dict[int, bool] = {vk: bool(user32.GetAsyncKeyState(vk) & 0x8000) for vk in monitored_vks}
         vk_lbutton = 0x01
+        mouse_down = bool(user32.GetAsyncKeyState(vk_lbutton) & 0x8000)
 
         while not self._stop_event.is_set():
             # Check monitored keyboard keys
@@ -586,6 +641,9 @@ class MacroManager:
 
     def _hotkey_loop(self) -> None:
         """Global hotkey listener: F9 = Record toggle, F10 = Play toggle, F12 = E-Stop."""
+        if sys.platform != "win32":
+            return
+        _attach_desktop_win32()
         import ctypes
         user32 = ctypes.windll.user32
         vk_f9 = 0x78   # F9: Record/Stop

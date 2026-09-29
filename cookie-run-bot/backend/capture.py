@@ -106,6 +106,18 @@ class MSSCapture(CaptureBackend):
 
     def grab(self) -> np.ndarray:
         if self._sct is None:
+            if sys.platform == "win32":
+                try:
+                    import ctypes
+                    u = ctypes.windll.user32
+                    hwinsta = u.OpenWindowStationW("WinSta0", False, 0x37F)
+                    if hwinsta:
+                        u.SetProcessWindowStation(hwinsta)
+                        hdesk = u.OpenDesktopW("Default", 0, False, 0x1FF)
+                        if hdesk:
+                            u.SetThreadDesktop(hdesk)
+                except Exception:
+                    pass
             try:
                 import mss  # type: ignore
             except ImportError as exc:

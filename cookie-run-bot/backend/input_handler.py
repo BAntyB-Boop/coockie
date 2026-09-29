@@ -196,6 +196,57 @@ class ADBInput(InputBackend):
                   self.adb.command_timeout_s + ms / 1000.0)
 
 
+def _attach_desktop_win32() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        hwinsta = u.OpenWindowStationW("WinSta0", False, 0x37F)
+        if hwinsta:
+            u.SetProcessWindowStation(hwinsta)
+            hdesk = u.OpenDesktopW("Default", 0, False, 0x1FF)
+            if hdesk:
+                u.SetThreadDesktop(hdesk)
+    except Exception:
+        pass
+
+
+def _post_key_to_emulator(key: str, is_down: bool) -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        hwnd = u.FindWindowW(None, "LDPlayer")
+        if not hwnd:
+            return
+        render_hwnd = None
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+
+        def enum_child_cb(h, lparam):
+            nonlocal render_hwnd
+            sb = ctypes.create_unicode_buffer(256)
+            u.GetClassNameW(h, sb, 256)
+            if sb.value == "RenderWindow":
+                render_hwnd = h
+                return False
+            return True
+
+        u.EnumChildWindows(hwnd, WNDENUMPROC(enum_child_cb), 0)
+        target = render_hwnd or hwnd
+        vk = ord(key.upper()) if len(key) == 1 and key.isalpha() else (0x20 if key.lower() == "space" else (0x28 if key.lower() == "down" else 0))
+        if vk == 0:
+            return
+        scan = u.MapVirtualKeyW(vk, 0)
+        msg = 0x0100 if is_down else 0x0101
+        lparam = (1 | (scan << 16)) if is_down else (1 | (scan << 16) | (1 << 30) | (1 << 31))
+        u.PostMessageW(target, msg, vk, lparam)
+    except Exception:
+        pass
+
+
 class WindowsKeyboardInput(InputBackend):
     """Keyboard input via PyDirectInput (Windows only; imported lazily)."""
 
@@ -237,17 +288,23 @@ class WindowsKeyboardInput(InputBackend):
     def tap(self, action: str, ctx: InputContext, tap_ms: int) -> None:  # pragma: no cover - windows only
         if not self._pdi:
             raise InputError(self._import_error or "keyboard unavailable")
+        _attach_desktop_win32()
         key = self._key(action, ctx)
+        tap_duration = max(tap_ms / 1000.0, 0.08)
+        _post_key_to_emulator(key, True)
         self._pdi.keyDown(key)
         try:
-            threading.Event().wait(tap_ms / 1000.0)
+            threading.Event().wait(tap_duration)
         finally:
             self._pdi.keyUp(key)
+            _post_key_to_emulator(key, False)
 
     def hold_start(self, action: str, ctx: InputContext) -> None:  # pragma: no cover - windows only
         if not self._pdi:
             raise InputError(self._import_error or "keyboard unavailable")
+        _attach_desktop_win32()
         key = self._key(action, ctx)
+        _post_key_to_emulator(key, True)
         self._pdi.keyDown(key)
         self.held.add(key)
 
@@ -255,9 +312,11 @@ class WindowsKeyboardInput(InputBackend):
         if ctx is None:
             self.release_all()
             return
+        _attach_desktop_win32()
         key = self._key(action, ctx)
         if self._pdi and key in self.held:
             self._pdi.keyUp(key)
+            _post_key_to_emulator(key, False)
         self.held.discard(key)
 
     def release_all(self) -> None:
@@ -265,6 +324,7 @@ class WindowsKeyboardInput(InputBackend):
             for key in list(self.held):
                 try:
                     self._pdi.keyUp(key)
+                    _post_key_to_emulator(key, False)
                 except Exception:
                     pass
         self.held.clear()
@@ -417,6 +477,7 @@ class InputWorker:
         self._execute(cmd)
 
     def _run(self) -> None:
+        _attach_desktop_win32()
         while not self._stop.is_set():
             try:
                 self.process_once(self._next_wait(self.clock.now()))
